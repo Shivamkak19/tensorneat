@@ -3,7 +3,7 @@ from jax import vmap, numpy as jnp
 import numpy as np
 
 from .gene import BaseGene
-from tensorneat.common import fetch_first, I_INF
+from ..common import fetch_first, I_INF
 
 
 def unflatten_conns(nodes, conns):

@@ -4,14 +4,14 @@ import numpy as np
 import jax, jax.numpy as jnp
 import sympy as sp
 
-from tensorneat.common import (
+from ....common import (
     ACT,
     AGG,
     apply_activation,
     apply_aggregation,
     mutate_int,
     mutate_float,
-    get_func_name
+    get_func_name,
 )
 
 from .base import BaseNode
@@ -153,7 +153,9 @@ class DefaultNode(BaseNode):
 
         # the last output node should not be activated
         z = jax.lax.cond(
-            is_output_node, lambda: z, lambda: apply_activation(act, z, self.activation_options)
+            is_output_node,
+            lambda: z,
+            lambda: apply_activation(act, z, self.activation_options),
         )
 
         return z

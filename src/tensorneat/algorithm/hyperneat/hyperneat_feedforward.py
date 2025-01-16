@@ -6,9 +6,9 @@ from typing import Callable
 
 from .substrate import *
 from .hyperneat import HyperNEAT, HyperNEATNode, HyperNEATConn
-from tensorneat.common import ACT, AGG
-from tensorneat.algorithm import NEAT
-from tensorneat.genome import DefaultGenome
+from ...common import ACT, AGG
+from ...algorithm import NEAT
+from ...genome import DefaultGenome
 
 
 class HyperNEATFeedForward(HyperNEAT):

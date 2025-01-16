@@ -1,4 +1,4 @@
-from tensorneat.common import StatefulBaseClass
+from ....common import StatefulBaseClass
 
 
 class BaseSubstrate(StatefulBaseClass):

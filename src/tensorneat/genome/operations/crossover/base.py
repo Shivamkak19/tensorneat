@@ -1,4 +1,4 @@
-from tensorneat.common import StatefulBaseClass, State
+from ....common import StatefulBaseClass, State
 
 
 class BaseCrossover(StatefulBaseClass):

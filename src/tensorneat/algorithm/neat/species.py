@@ -4,7 +4,7 @@ import jax
 from jax import vmap, numpy as jnp
 import numpy as np
 
-from tensorneat.common import (
+from ...common import (
     State,
     StatefulBaseClass,
     rank_elements,

@@ -6,8 +6,8 @@ import numpy as np
 
 from .species import SpeciesController
 from .. import BaseAlgorithm
-from tensorneat.common import State
-from tensorneat.genome import BaseGenome
+from ...common import State
+from ...genome import BaseGenome
 
 
 class NEAT(BaseAlgorithm):

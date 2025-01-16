@@ -4,9 +4,9 @@ import jax
 from jax import vmap, numpy as jnp
 
 from .substrate import *
-from tensorneat.common import State, ACT, AGG
-from tensorneat.algorithm import BaseAlgorithm, NEAT
-from tensorneat.genome import BaseNode, BaseConn, RecurrentGenome
+from ...common import State, ACT, AGG
+from ...algorithm import BaseAlgorithm, NEAT
+from ...genome import BaseNode, BaseConn, RecurrentGenome
 
 
 class HyperNEAT(BaseAlgorithm):

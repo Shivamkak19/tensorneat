@@ -5,7 +5,7 @@ import jax
 from jax import vmap, numpy as jnp
 from .gene import BaseNode, BaseConn
 from .operations import BaseMutation, BaseCrossover, BaseDistance
-from tensorneat.common import (
+from ..common import (
     State,
     StatefulBaseClass,
     hash_array,

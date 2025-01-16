@@ -10,7 +10,7 @@ from .gene import DefaultNode, DefaultConn
 from .operations import DefaultMutation, DefaultCrossover, DefaultDistance
 from .utils import unflatten_conns, extract_gene_attrs, extract_gene_attrs
 
-from tensorneat.common import (
+from ..common import (
     topological_sort,
     topological_sort_python,
     I_INF,
@@ -65,22 +65,28 @@ class DefaultGenome(BaseGenome):
         return seqs, nodes, conns, u_conns
 
     def forward(self, state, transformed, inputs):
-
         if self.input_transform is not None:
             inputs = self.input_transform(inputs)
 
         cal_seqs, nodes, conns, u_conns = transformed
+        batch_size = inputs.shape[0] if len(inputs.shape) > 1 else 1
 
-        ini_vals = jnp.full((self.max_nodes,), jnp.nan)
-        ini_vals = ini_vals.at[self.input_idx].set(inputs)
+        # Create batched initial values
+        ini_vals = jnp.full((batch_size, self.max_nodes), jnp.nan)
+
+        # Handle both batched and unbatched inputs
+        if len(inputs.shape) == 1:
+            inputs = inputs[None, :]  # Add batch dimension if not present
+
+        # Set input values for all batches
+        ini_vals = ini_vals.at[:, self.input_idx].set(inputs)
+
         nodes_attrs = vmap(extract_gene_attrs, in_axes=(None, 0))(self.node_gene, nodes)
         conns_attrs = vmap(extract_gene_attrs, in_axes=(None, 0))(self.conn_gene, conns)
 
         def cond_fun(carry):
             values, idx = carry
-            return (idx < self.max_nodes) & (
-                cal_seqs[idx] != I_INF
-            )  # not out of bounds and next node exists
+            return (idx < self.max_nodes) & (cal_seqs[idx] != I_INF)
 
         def body_func(carry):
             values, idx = carry
@@ -90,39 +96,43 @@ class DefaultGenome(BaseGenome):
                 return values
 
             def otherwise():
-                # calculate connections
+                # Calculate connections
                 conn_indices = u_conns[:, i]
-                hit_attrs = attach_with_inf(
-                    conns_attrs, conn_indices
-                )  # fetch conn attrs
-                ins = vmap(self.conn_gene.forward, in_axes=(None, 0, 0))(
-                    state, hit_attrs, values
-                )
+                hit_attrs = attach_with_inf(conns_attrs, conn_indices)
 
-                # calculate nodes
-                z = self.node_gene.forward(
-                    state,
-                    nodes_attrs[i],
-                    ins,
-                    is_output_node=jnp.isin(
-                        nodes[i, 0], self.output_idx
-                    ),  # nodes[0] -> the key of nodes
-                )
+                # Handle batched operations
+                ins = vmap(
+                    lambda vals: vmap(self.conn_gene.forward, in_axes=(None, 0, 0))(
+                        state, hit_attrs, vals
+                    ),
+                    in_axes=0,
+                )(values)
 
-                # set new value
-                new_values = values.at[i].set(z)
+                # Calculate nodes for each batch
+                z = vmap(
+                    lambda ins: self.node_gene.forward(
+                        state,
+                        nodes_attrs[i],
+                        ins,
+                        is_output_node=jnp.isin(nodes[i, 0], self.output_idx),
+                    )
+                )(ins)
+
+                # Update values for all batches
+                new_values = values.at[:, i].set(z)
                 return new_values
 
             values = jax.lax.cond(jnp.isin(i, self.input_idx), input_node, otherwise)
-
             return values, idx + 1
 
-        vals, _ = jax.lax.while_loop(cond_fun, body_func, (ini_vals, 0))
+        final_vals, _ = jax.lax.while_loop(cond_fun, body_func, (ini_vals, 0))
 
+        # Get outputs and handle transformation
+        outputs = final_vals[:, self.output_idx]
         if self.output_transform is None:
-            return vals[self.output_idx]
+            return outputs
         else:
-            return self.output_transform(vals[self.output_idx])
+            return vmap(self.output_transform)(outputs)
 
     def network_dict(self, state, nodes, conns):
         network = super().network_dict(state, nodes, conns)

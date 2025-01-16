@@ -1,7 +1,7 @@
 import jax
 from jax import vmap, numpy as jnp
 from . import BaseMutation
-from tensorneat.common import (
+from ....common import (
     fetch_first,
     fetch_random,
     I_INF,
@@ -13,8 +13,8 @@ from ...utils import (
     add_conn,
     delete_node_by_pos,
     delete_conn_by_pos,
-    extract_gene_attrs, 
-    set_gene_attrs
+    extract_gene_attrs,
+    set_gene_attrs,
 )
 
 
@@ -71,7 +71,9 @@ class DefaultMutation(BaseMutation):
 
                 # add a new node with identity attrs
                 new_nodes = add_node(
-                    nodes_, jnp.array([new_node_key]), genome.node_gene.new_identity_attrs(state)
+                    nodes_,
+                    jnp.array([new_node_key]),
+                    genome.node_gene.new_identity_attrs(state),
                 )
 
                 # whether to use historical marker in connection

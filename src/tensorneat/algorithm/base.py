@@ -1,4 +1,4 @@
-from tensorneat.common import State, StatefulBaseClass
+from ..common import State, StatefulBaseClass
 
 
 class BaseAlgorithm(StatefulBaseClass):

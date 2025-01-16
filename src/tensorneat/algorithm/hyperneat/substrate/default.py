@@ -2,7 +2,7 @@ from jax import vmap
 import numpy as np
 
 from .base import BaseSubstrate
-from tensorneat.genome.utils import set_gene_attrs
+from ....genome.utils import set_gene_attrs
 
 
 class DefaultSubstrate(BaseSubstrate):

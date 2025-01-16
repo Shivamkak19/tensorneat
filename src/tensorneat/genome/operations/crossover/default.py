@@ -4,8 +4,8 @@ from jax import vmap, numpy as jnp
 from .base import BaseCrossover
 from ...utils import extract_gene_attrs, set_gene_attrs
 
-from tensorneat.common import fetch_first, I_INF
-from tensorneat.genome.gene import BaseGene
+from ....common import fetch_first, I_INF
+from ....genome.gene import BaseGene
 
 
 class DefaultCrossover(BaseCrossover):

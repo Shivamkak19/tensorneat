@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import jax.random
 import sympy as sp
-from tensorneat.common import mutate_float
+from ....common import mutate_float
 from .base import BaseConn
 
 
@@ -28,7 +28,6 @@ class DefaultConn(BaseConn):
         self.weight_replace_rate = weight_replace_rate
         self.weight_lower_bound = weight_lower_bound
         self.weight_upper_bound = weight_upper_bound
-
 
     def new_zero_attrs(self, state):
         return jnp.array([0.0])  # weight = 0

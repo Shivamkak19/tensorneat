@@ -7,7 +7,7 @@ from .gene import DefaultNode, DefaultConn
 from .operations import DefaultMutation, DefaultCrossover, DefaultDistance
 from .utils import unflatten_conns, extract_gene_attrs, extract_gene_attrs
 
-from tensorneat.common import attach_with_inf
+from ..common import attach_with_inf
 
 class RecurrentGenome(BaseGenome):
     """Default genome class, with the same behavior as the NEAT-Python"""
