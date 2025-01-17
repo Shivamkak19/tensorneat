@@ -29,7 +29,7 @@ class DefaultGenome(BaseGenome):
         self,
         num_inputs: int,
         num_outputs: int,
-        max_nodes=50,
+        max_nodes=200,
         max_conns=100,
         node_gene=DefaultNode(),
         conn_gene=DefaultConn(),
@@ -268,19 +268,20 @@ class DefaultGenome(BaseGenome):
         network,
         rotate=0,
         reverse_node_order=False,
-        size=(300, 300, 300),
         color=("yellow", "white", "blue"),
-        with_labels=False,
         edgecolors="k",
         arrowstyle="->",
         arrowsize=3,
         edge_color=(0.3, 0.3, 0.3),
         save_path="network.svg",
-        save_dpi=800,
+        save_dpi=50,  # Reduced default DPI
+        figure_size=(10, 7),  # Control figure size explicitly
         **kwargs,
     ):
+      
         import networkx as nx
         from matplotlib import pyplot as plt
+        import numpy as np
 
         conns_list = list(network["conns"])
         input_idx = self.get_input_idx()
@@ -295,50 +296,173 @@ class DefaultGenome(BaseGenome):
 
         G = nx.DiGraph()
 
-        if not isinstance(size, tuple):
-            size = (size, size, size)
-        if not isinstance(color, tuple):
-            color = (color, color, color)
+        # Create node labels dictionary
+        node_labels = {}
 
+        # Add nodes with activation function info
         for node in topo_order:
+            node_data = network["nodes"][node]
+            activation = node_data.get("act", "none")  # Get activation function name
+            
+            # Create concise label
+            node_labels[node] = f"{node}\n{activation}"
+            
+            # Add node with appropriate color
             if node in input_idx:
-                G.add_node(node, subset=node2layer[node], size=size[0], color=color[0])
+                G.add_node(node, subset=node2layer[node], color=color[0])
             elif node in output_idx:
-                G.add_node(node, subset=node2layer[node], size=size[2], color=color[2])
+                G.add_node(node, subset=node2layer[node], color=color[2])
             else:
-                G.add_node(node, subset=node2layer[node], size=size[1], color=color[1])
+                G.add_node(node, subset=node2layer[node], color=color[1])
 
+        # Add edges
         for conn in conns_list:
             G.add_edge(conn[0], conn[1])
+
         pos = nx.multipartite_layout(G)
 
+        # Rotation function
         def rotate_layout(pos, angle):
             angle_rad = np.deg2rad(angle)
             cos_angle, sin_angle = np.cos(angle_rad), np.sin(angle_rad)
-            rotated_pos = {}
-            for node, (x, y) in pos.items():
-                rotated_pos[node] = (
+            return {
+                node: (
                     cos_angle * x - sin_angle * y,
                     sin_angle * x + cos_angle * y,
                 )
-            return rotated_pos
+                for node, (x, y) in pos.items()
+            }
 
         rotated_pos = rotate_layout(pos, rotate)
-
-        node_sizes = [n["size"] for n in G.nodes.values()]
         node_colors = [n["color"] for n in G.nodes.values()]
 
+        # Clear any existing plots and set figure size
+        plt.clf()
+        plt.figure(figsize=figure_size)
+
+        # Remove with_labels from kwargs if present
+        kwargs.pop('with_labels', None)
+
+        # Draw the network
         nx.draw(
             G,
             pos=rotated_pos,
-            node_size=node_sizes,
             node_color=node_colors,
-            with_labels=with_labels,
+            node_size=1500,  # Reduced node size
             edgecolors=edgecolors,
             arrowstyle=arrowstyle,
             arrowsize=arrowsize,
             edge_color=edge_color,
+            with_labels=True,
+            labels=node_labels,
+            font_size=7,  # Smaller font size
+            font_weight="bold",
             **kwargs,
         )
-        plt.savefig(save_path, dpi=save_dpi)
+
+        # Save with optimized settings
+        plt.savefig(
+            save_path, 
+            dpi=save_dpi, 
+            bbox_inches="tight",
+            format='svg' if save_path.endswith('.svg') else None
+        )
         plt.close()
+
+    # def visualize(
+    #     self,
+    #     network,
+    #     rotate=0,
+    #     reverse_node_order=False,
+    #     size=(300, 300, 300),
+    #     color=("yellow", "white", "blue"),
+    #     with_labels=False,
+    #     edgecolors="k",
+    #     arrowstyle="->",
+    #     arrowsize=3,
+    #     edge_color=(0.3, 0.3, 0.3),
+    #     save_path="network.svg",
+    #     save_dpi=800,
+    #     **kwargs,
+    # ):
+    #     import networkx as nx
+    #     from matplotlib import pyplot as plt
+
+    #     print("GENE GATE 1")
+
+    #     conns_list = list(network["conns"])
+    #     input_idx = self.get_input_idx()
+    #     output_idx = self.get_output_idx()
+
+    #     print("GENE GATE 2")
+
+    #     topo_order, topo_layers = network["topo_order"], network["topo_layers"]
+    #     node2layer = {
+    #         node: layer for layer, nodes in enumerate(topo_layers) for node in nodes
+    #     }
+    #     if reverse_node_order:
+    #         topo_order = topo_order[::-1]
+
+    #     G = nx.DiGraph()
+
+    #     print("GENE GATE 3")
+
+    #     if not isinstance(size, tuple):
+    #         size = (size, size, size)
+    #     if not isinstance(color, tuple):
+    #         color = (color, color, color)
+
+    #     print("GENE GATE 3.1")
+
+    #     print("topo order:", topo_order)
+    #     print("topo layers:", topo_layers)
+    #     print("node2layer", node2layer)
+    #     for node in topo_order:
+    #         print("node:", node, "inputidx:", input_idx, "outputidx:", output_idx)
+    #         if node in input_idx:
+    #             G.add_node(node, subset=node2layer[node], size=size[0], color=color[0])
+    #         elif node in output_idx:
+    #             print("subset check:", node2layer[node])
+    #             G.add_node(node, subset=node2layer[node], size=size[2], color=color[2])
+    #         else:
+    #             G.add_node(node, subset=node2layer[node], size=size[1], color=color[1])
+    #         print("node out success: ", node)
+
+    #     print("GENE GATE 3.2")
+    #     for conn in conns_list:
+    #         G.add_edge(conn[0], conn[1])
+    #     pos = nx.multipartite_layout(G)
+
+    #     def rotate_layout(pos, angle):
+    #         angle_rad = np.deg2rad(angle)
+    #         cos_angle, sin_angle = np.cos(angle_rad), np.sin(angle_rad)
+    #         rotated_pos = {}
+    #         for node, (x, y) in pos.items():
+    #             rotated_pos[node] = (
+    #                 cos_angle * x - sin_angle * y,
+    #                 sin_angle * x + cos_angle * y,
+    #             )
+    #         return rotated_pos
+
+    #     print("GENE GATE 3.3")
+    #     rotated_pos = rotate_layout(pos, rotate)
+
+    #     print("GENE GATE 3.4")
+    #     node_sizes = [n["size"] for n in G.nodes.values()]
+    #     node_colors = [n["color"] for n in G.nodes.values()]
+
+    #     print("GENE GATE 4")
+    #     nx.draw(
+    #         G,
+    #         pos=rotated_pos,
+    #         node_size=node_sizes,
+    #         node_color=node_colors,
+    #         with_labels=with_labels,
+    #         edgecolors=edgecolors,
+    #         arrowstyle=arrowstyle,
+    #         arrowsize=arrowsize,
+    #         edge_color=edge_color,
+    #         **kwargs,
+    #     )
+    #     plt.savefig(save_path, dpi=save_dpi)
+    #     plt.close()

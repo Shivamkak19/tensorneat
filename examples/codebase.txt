@@ -1,0 +1,900 @@
+=== ./gymnax/cartpole.py ===
+import jax.numpy as jnp
+
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.genome import DefaultGenome, BiasNode
+
+from tensorneat.problem.rl import GymNaxEnv
+from tensorneat.common import ACT, AGG
+
+
+
+if __name__ == "__main__":
+    # the network has 2 outputs, the max one will be the action
+    # as the action of cartpole is {0, 1}
+
+    pipeline = Pipeline(
+        algorithm=NEAT(
+            pop_size=1000,
+            species_size=20,
+            survival_threshold=0.1,
+            compatibility_threshold=1.0,
+            genome=DefaultGenome(
+                num_inputs=4,
+                num_outputs=2,
+                init_hidden_layers=(),
+                node_gene=BiasNode(
+                    activation_options=ACT.tanh,
+                    aggregation_options=AGG.sum,
+                ),
+                output_transform=jnp.argmax,
+            ),
+        ),
+        problem=GymNaxEnv(
+            env_name="CartPole-v1",
+            repeat_times=5,
+        ),
+        seed=42,
+        generation_limit=100,
+        fitness_target=500,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+
+
+=== ./gymnax/mountain_car_continuous.py ===
+import jax.numpy as jnp
+
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.genome import DefaultGenome, BiasNode
+
+from tensorneat.problem.rl import GymNaxEnv
+from tensorneat.common import ACT, AGG
+
+
+
+if __name__ == "__main__":
+    pipeline = Pipeline(
+        algorithm=NEAT(
+            pop_size=1000,
+            species_size=20,
+            survival_threshold=0.1,
+            compatibility_threshold=1.0,
+            genome=DefaultGenome(
+                num_inputs=2,
+                num_outputs=1,
+                init_hidden_layers=(),
+                node_gene=BiasNode(
+                    activation_options=ACT.tanh,
+                    aggregation_options=AGG.sum,
+                ),
+                output_transform=ACT.tanh,
+            ),
+        ),
+        problem=GymNaxEnv(
+            env_name="MountainCarContinuous-v0",
+            repeat_times=5,
+        ),
+        seed=42,
+        generation_limit=100,
+        fitness_target=99,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+
+
+=== ./gymnax/arcbot.py ===
+import jax.numpy as jnp
+
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.genome import DefaultGenome, BiasNode
+
+from tensorneat.problem.rl import GymNaxEnv
+from tensorneat.common import ACT, AGG
+
+
+
+if __name__ == "__main__":
+    # the network has 3 outputs, the max one will be the action
+    # as the action of acrobot is {0, 1, 2}
+
+    pipeline = Pipeline(
+        algorithm=NEAT(
+            pop_size=1000,
+            species_size=20,
+            survival_threshold=0.1,
+            compatibility_threshold=1.0,
+            genome=DefaultGenome(
+                num_inputs=6,
+                num_outputs=3,
+                init_hidden_layers=(),
+                node_gene=BiasNode(
+                    activation_options=ACT.tanh,
+                    aggregation_options=AGG.sum,
+                ),
+                output_transform=jnp.argmax,
+            ),
+        ),
+        problem=GymNaxEnv(
+            env_name="Acrobot-v1",
+        ),
+        seed=42,
+        generation_limit=100,
+        fitness_target=-60,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+
+
+=== ./gymnax/cartpole_hyperneat.py ===
+import jax.numpy as jnp
+
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.algorithm.hyperneat import HyperNEAT, FullSubstrate
+from tensorneat.genome import DefaultGenome
+from tensorneat.common import ACT
+
+from tensorneat.problem import GymNaxEnv
+
+if __name__ == "__main__":
+
+    # the num of input_coors is 5
+    # 4 is for cartpole inputs, 1 is for bias
+    pipeline = Pipeline(
+        algorithm=HyperNEAT(
+            substrate=FullSubstrate(
+                input_coors=((-1, -1), (-0.5, -1), (0, -1), (0.5, -1), (1, -1)),
+                hidden_coors=((-1, 0), (0, 0), (1, 0)),
+                output_coors=((-1, 1), (1, 1)),
+            ),
+            neat=NEAT(
+                pop_size=10000,
+                species_size=20,
+                survival_threshold=0.01,
+                genome=DefaultGenome(
+                    num_inputs=4,  # size of query coors
+                    num_outputs=1,
+                    init_hidden_layers=(),
+                    output_transform=ACT.tanh,
+                ),
+            ),
+            activation=ACT.tanh,
+            activate_time=10,
+            output_transform=jnp.argmax,
+        ),
+        problem=GymNaxEnv(
+            env_name="CartPole-v1",
+            repeat_times=5,
+        ),
+        generation_limit=300,
+        fitness_target=-1e-6,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+    # print(state)
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+
+
+=== ./func_fit/custom_func_fit.py ===
+import jax.numpy as jnp
+
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.genome import DefaultGenome, BiasNode
+from tensorneat.problem.func_fit import CustomFuncFit
+from tensorneat.common import ACT, AGG
+
+# define a custom function fit problem
+def pagie_polynomial(inputs):
+    x, y = inputs
+    res = 1 / (1 + jnp.pow(x, -4)) + 1 / (1 + jnp.pow(y, -4))
+
+    # important! returns an array, NOT a scalar
+    return jnp.array([res])
+
+# define custom activate function and register it
+def square(x):
+    return x ** 2
+ACT.add_func("square", square)
+
+if __name__ == "__main__":
+    custom_problem = CustomFuncFit(
+        func=pagie_polynomial,
+        low_bounds=[-1, -1],
+        upper_bounds=[1, 1],
+        method="sample",
+        num_samples=100,
+    )
+
+    pipeline = Pipeline(
+        algorithm=NEAT(
+            pop_size=10000,
+            species_size=20,
+            survival_threshold=0.01,
+            genome=DefaultGenome(
+                num_inputs=2,
+                num_outputs=1,
+                init_hidden_layers=(),
+                node_gene=BiasNode(
+                    activation_options=[ACT.identity, ACT.inv, ACT.square],
+                    aggregation_options=[AGG.sum, AGG.product],
+                ),
+                output_transform=ACT.identity,
+            ),
+        ),
+        problem=custom_problem,
+        generation_limit=50,
+        fitness_target=-1e-4,
+        seed=42,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+    # show result
+    pipeline.show(state, best)
+
+
+=== ./func_fit/xor_hyperneat.py ===
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.algorithm.hyperneat import HyperNEAT, FullSubstrate
+from tensorneat.genome import DefaultGenome
+from tensorneat.common import ACT
+
+from tensorneat.problem.func_fit import XOR3d
+
+if __name__ == "__main__":
+    pipeline = Pipeline(
+        algorithm=HyperNEAT(
+            substrate=FullSubstrate(
+                input_coors=((-1, -1), (-0.33, -1), (0.33, -1), (1, -1)),
+                hidden_coors=((-1, 0), (0, 0), (1, 0)),
+                output_coors=((0, 1),),
+            ),
+            neat=NEAT(
+                pop_size=10000,
+                species_size=20,
+                survival_threshold=0.01,
+                genome=DefaultGenome(
+                    num_inputs=4,  # size of query coors
+                    num_outputs=1,
+                    init_hidden_layers=(),
+                    output_transform=ACT.tanh,
+                ),
+            ),
+            activation=ACT.tanh,
+            activate_time=10,
+            output_transform=ACT.sigmoid,
+        ),
+        problem=XOR3d(),
+        generation_limit=300,
+        fitness_target=-1e-6,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+    # print(state)
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+    # show result
+    pipeline.show(state, best)
+
+
+=== ./func_fit/xor_recurrent.py ===
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.genome import RecurrentGenome
+from tensorneat.problem.func_fit import XOR3d
+from tensorneat.common import ACT, AGG
+
+if __name__ == "__main__":
+    pipeline = Pipeline(
+        algorithm=NEAT(
+            pop_size=10000,
+            species_size=20,
+            survival_threshold=0.01,
+            genome=RecurrentGenome(
+                num_inputs=3,
+                num_outputs=1,
+                init_hidden_layers=(),
+                output_transform=ACT.sigmoid,
+                activate_time=10,
+            ),
+        ),
+        problem=XOR3d(),
+        generation_limit=500,
+        fitness_target=-1e-6,  # float32 precision
+        seed=42,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+    # show result
+    pipeline.show(state, best)
+
+
+=== ./func_fit/xor_hyperneat_feedforward.py ===
+import jax.numpy as jnp
+
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.algorithm.hyperneat import HyperNEATFeedForward, MLPSubstrate
+from tensorneat.genome import DefaultGenome
+from tensorneat.common import ACT
+
+from tensorneat.problem.func_fit import XOR3d
+
+if __name__ == "__main__":
+    pipeline = Pipeline(
+        algorithm=HyperNEATFeedForward(
+            substrate=MLPSubstrate(
+                layers=[4, 5, 5, 5, 1], coor_range=(-5.0, 5.0, -5.0, 5.0)
+            ),
+            neat=NEAT(
+                pop_size=10000,
+                species_size=20,
+                survival_threshold=0.01,
+                genome=DefaultGenome(
+                    num_inputs=4,  # size of query coors
+                    num_outputs=1,
+                    init_hidden_layers=(),
+                    output_transform=ACT.tanh,
+                ),
+            ),
+            activation=ACT.tanh,
+            output_transform=ACT.sigmoid,
+        ),
+        problem=XOR3d(),
+        generation_limit=1000,
+        fitness_target=-1e-5,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+    # print(state)
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+    # show result
+    pipeline.show(state, best)
+
+    # visualize cppn
+    cppn_genome = pipeline.algorithm.neat.genome
+    cppn_network = cppn_genome.network_dict(state, *best)
+    cppn_genome.visualize(cppn_network, save_path="./imgs/cppn_network.svg")
+
+    # visualize hyperneat genome
+    hyperneat_genome = pipeline.algorithm.hyper_genome
+    # use cppn to calculate the weights in hyperneat genome
+    # return seqs, nodes, conns, u_conns
+    _, hyperneat_nodes, hyperneat_conns, _ = pipeline.algorithm.transform(state, best)
+    # mutate the connection with weight 0 (to visualize the network rather the substrate)
+    hyperneat_conns = jnp.where(
+        hyperneat_conns[:, 2][:, None] == 0, jnp.nan, hyperneat_conns
+    )
+    hyperneat_network = hyperneat_genome.network_dict(
+        state, hyperneat_nodes, hyperneat_conns
+    )
+    hyperneat_genome.visualize(
+        hyperneat_network, save_path="./imgs/hyperneat_network.svg"
+    )
+
+
+=== ./func_fit/xor_origin.py ===
+from tensorneat.pipeline import Pipeline
+from tensorneat import algorithm, genome, problem
+from tensorneat.genome import OriginNode, OriginConn
+from tensorneat.common import ACT
+
+"""
+Solving XOR-3d problem with OriginGene
+See https://github.com/EMI-Group/tensorneat/issues/11
+"""
+
+algorithm = algorithm.NEAT(
+    pop_size=10000,
+    species_size=20,
+    survival_threshold=0.01,
+    genome=genome.DefaultGenome(
+        node_gene=OriginNode(),
+        conn_gene=OriginConn(),
+        num_inputs=3,
+        num_outputs=1,
+        max_nodes=7,
+        output_transform=ACT.sigmoid,
+    ),
+)
+problem = problem.XOR3d()
+
+pipeline = Pipeline(
+    algorithm,
+    problem,
+    generation_limit=200,
+    fitness_target=-1e-6,
+    seed=42,
+)
+state = pipeline.setup()
+# run until terminate
+state, best = pipeline.auto_run(state)
+# show result
+pipeline.show(state, best)
+
+# visualize the best individual
+network = algorithm.genome.network_dict(state, *best)
+print(algorithm.genome.repr(state, *best))
+# algorithm.genome.visualize(network, save_path="./imgs/xor_network.svg")
+
+# transform the best individual to latex formula
+from tensorneat.common.sympy_tools import to_latex_code, to_python_code
+
+sympy_res = algorithm.genome.sympy_func(
+    state, network, sympy_output_transform=ACT.obtain_sympy(ACT.sigmoid)
+)
+latex_code = to_latex_code(*sympy_res)
+print(latex_code)
+
+# transform the best individual to python code
+python_code = to_python_code(*sympy_res)
+print(python_code)
+
+
+=== ./func_fit/xor.py ===
+from tensorneat.pipeline import Pipeline
+from tensorneat import algorithm, genome, problem
+from tensorneat.common import ACT
+
+algorithm = algorithm.NEAT(
+    pop_size=10000,
+    species_size=20,
+    survival_threshold=0.01,
+    genome=genome.DefaultGenome(
+        num_inputs=3,
+        num_outputs=1,
+        max_nodes=7,
+        output_transform=ACT.sigmoid,
+    ),
+)
+problem = problem.XOR3d()
+
+pipeline = Pipeline(
+    algorithm,
+    problem,
+    generation_limit=200,
+    fitness_target=-1e-6,
+    seed=42,
+)
+state = pipeline.setup()
+# run until terminate
+state, best = pipeline.auto_run(state)
+# show result
+pipeline.show(state, best)
+
+# visualize the best individual
+network = algorithm.genome.network_dict(state, *best)
+print(algorithm.genome.repr(state, *best))
+# algorithm.genome.visualize(network, save_path="./imgs/xor_network.svg")
+
+# transform the best individual to latex formula
+from tensorneat.common.sympy_tools import to_latex_code, to_python_code
+
+sympy_res = algorithm.genome.sympy_func(
+    state, network, sympy_output_transform=ACT.obtain_sympy(ACT.sigmoid)
+)
+latex_code = to_latex_code(*sympy_res)
+print(latex_code)
+
+# transform the best individual to python code
+python_code = to_python_code(*sympy_res)
+print(python_code)
+
+
+=== ./interpret_visualize/visualize_genome.py ===
+h = np.zeros(3)
+o = np.zeros(4)
+h[0] = -tanh(0.540486*i[0] + 1.04397*i[1] + 0.58006*i[10] + 0.658223*i[11] - 0.9918*i[12] - 0.01919*i[13] + 0.194062*i[14] + 0.903314*i[15] - 1.906567*i[2] - 1.666336*i[3] + 0.653257*i[4] + 0.580191*i[5] + 0.177264*i[6] + 0.830688*i[7] - 0.855676*i[8] + 0.326538*i[9] + 2.465507)
+h[1] = -tanh(1.441044*i[0] - 0.606109*i[1] - 0.736058*i[10] + 0.60264*i[11] - 0.837565*i[12] + 2.018719*i[13] + 0.327097*i[14] + 0.098963*i[15] + 0.403485*i[2] - 0.680547*i[3] + 0.349021*i[4] - 1.359364*i[5] + 0.351466*i[6] + 0.450447*i[7] + 2.102749*i[8] + 0.680605*i[9] + 0.593945)
+h[2] = -tanh(1.350645*i[0] - 0.281682*i[1] + 0.332992*i[10] + 0.703457*i[11] + 1.290286*i[12] - 1.059887*i[13] - 1.114513*i[14] + 0.446127*i[15] + 1.103008*i[2] + 1.080698*i[3] - 0.89471*i[4] + 0.103146*i[5] - 0.828767*i[6] + 0.609362*i[7] - 0.765917*i[8] + 0.047898*i[9] + 0.649254)
+o[0] = -1.307307*h[0] - 0.985838*h[1] - 0.746408*h[2] + 0.245725
+o[1] = 0.64947*h[0] + 2.865669*h[1] + 1.185759*h[2] - 1.347174
+o[2] = 2.030407*h[0] + 1.001914*h[1] - 1.041287*h[2] + 0.301639
+o[3] = 0.717661*h[0] + 0.653905*h[1] - 1.387949*h[2] - 1.200779
+
+=== ./interpret_visualize/genome_sympy.py ===
+import jax, jax.numpy as jnp
+
+from tensorneat.genome import DefaultGenome
+from tensorneat.common import *
+from tensorneat.common.functions import SympySigmoid
+
+if __name__ == "__main__":
+    genome = DefaultGenome(
+        num_inputs=3,
+        num_outputs=1,
+        max_nodes=50,
+        max_conns=500,
+        output_transform=ACT.sigmoid,
+    )
+
+    state = genome.setup()
+
+    randkey = jax.random.PRNGKey(42)
+    nodes, conns = genome.initialize(state, randkey)
+
+    network = genome.network_dict(state, nodes, conns)
+
+    input_idx, output_idx = genome.get_input_idx(), genome.get_output_idx()
+
+    res = genome.sympy_func(state, network, sympy_input_transform=lambda x: 999*x, sympy_output_transform=SympySigmoid)
+    (symbols,
+    args_symbols,
+    input_symbols,
+    nodes_exprs,
+    output_exprs,
+    forward_func,) = res
+
+    print(symbols)
+    print(output_exprs[0].subs(args_symbols))
+
+    inputs = jnp.zeros(3)
+    print(forward_func(inputs))
+
+    print(genome.forward(state, genome.transform(state, nodes, conns), inputs))
+
+    print(AGG.sympy_module("jax"))
+    print(AGG.sympy_module("numpy"))
+
+    print(ACT.sympy_module("jax"))
+    print(ACT.sympy_module("numpy"))
+
+=== ./brax/hopper_origin.py ===
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.genome import DefaultGenome, OriginNode, OriginConn
+
+from tensorneat.problem.rl import BraxEnv
+from tensorneat.common import ACT, AGG
+
+"""
+Solving Hopper with OriginGene
+See https://github.com/EMI-Group/tensorneat/issues/11
+"""
+
+if __name__ == "__main__":
+    pipeline = Pipeline(
+        algorithm=NEAT(
+            pop_size=1000,
+            species_size=20,
+            survival_threshold=0.1,
+            compatibility_threshold=1.0,
+            genome=DefaultGenome(
+                num_inputs=11,
+                num_outputs=3,
+                init_hidden_layers=(),
+                # origin node gene, which use the same crossover behavior to the origin NEAT paper
+                node_gene=OriginNode(
+                    activation_options=ACT.tanh,
+                    aggregation_options=AGG.sum,
+                    response_lower_bound = 1,
+                    response_upper_bound= 1,  # fix response to 1
+                ),
+                # use origin connection, which using historical marker
+                conn_gene=OriginConn(),  
+                output_transform=ACT.tanh,
+            ),
+        ),
+        problem=BraxEnv(
+            env_name="hopper",
+            max_step=1000,
+        ),
+        seed=42,
+        generation_limit=100,
+        fitness_target=5000,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+    # print(state)
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+
+
+=== ./brax/walker2d.py ===
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.genome import DefaultGenome, BiasNode
+
+from tensorneat.problem.rl import BraxEnv
+from tensorneat.common import ACT, AGG
+
+import jax, jax.numpy as jnp
+
+
+def random_sample_policy(randkey, obs):
+    return jax.random.uniform(randkey, (6,), minval=-1.0, maxval=1.0)
+
+
+if __name__ == "__main__":
+    pipeline = Pipeline(
+        algorithm=NEAT(
+            pop_size=1000,
+            species_size=20,
+            survival_threshold=0.1,
+            compatibility_threshold=1.0,
+            genome=DefaultGenome(
+                max_nodes=50,
+                max_conns=200,
+                num_inputs=17,
+                num_outputs=6,
+                init_hidden_layers=(),
+                node_gene=BiasNode(
+                    activation_options=ACT.tanh,
+                    aggregation_options=AGG.sum,
+                ),
+                output_transform=ACT.tanh,
+            ),
+        ),
+        problem=BraxEnv(
+            env_name="walker2d",
+            max_step=1000,
+            obs_normalization=True,
+            sample_episodes=1000,
+            sample_policy=random_sample_policy,
+        ),
+        seed=42,
+        generation_limit=100,
+        fitness_target=5000,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+    # print(state)
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+
+
+=== ./brax/ant.py ===
+
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.genome import DefaultGenome, BiasNode, DefaultConn,DefaultMutation
+
+from tensorneat.problem.rl import BraxEnv
+from tensorneat.common import ACT, AGG
+import jax
+def random_sample_policy(randkey, obs):
+    return jax.random.uniform(randkey, (8,), minval=-1.0, maxval=1.0)
+if __name__ == "__main__":
+    pipeline = Pipeline(
+        algorithm=NEAT(
+            pop_size=3000,
+            species_size=20,
+            survival_threshold=0.1,
+            compatibility_threshold=0.8,
+            genome=DefaultGenome(
+                max_nodes=100,
+                max_conns=1500,
+                num_inputs=27,
+                num_outputs=8,
+                init_hidden_layers=(30,),
+                mutation=DefaultMutation(
+                    node_delete=0.0,
+                ),
+                node_gene=BiasNode(
+                    bias_init_std=0.1,
+                    bias_mutate_power=0.05,
+                    bias_mutate_rate=0.01,
+                    bias_replace_rate=0.0,
+                    activation_options=ACT.tanh,
+                    aggregation_options=AGG.sum,
+                ),
+                conn_gene=DefaultConn(
+                    weight_init_mean=0.0,
+                    weight_init_std=0.1,
+                    weight_mutate_power=0.05,
+                    weight_replace_rate=0.0,
+                    weight_mutate_rate=0.001,
+                ),
+                output_transform=ACT.tanh,
+            ),
+        ),
+        problem=BraxEnv(
+            env_name="ant",
+            max_step=1000,
+        ),
+        seed=42,
+        generation_limit=100,
+        fitness_target=8000,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+    # print(state)
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+
+=== ./brax/hopper.py ===
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.genome import DefaultGenome, BiasNode
+
+from tensorneat.problem.rl import BraxEnv
+from tensorneat.common import ACT, AGG
+
+if __name__ == "__main__":
+    pipeline = Pipeline(
+        algorithm=NEAT(
+            pop_size=1000,
+            species_size=20,
+            survival_threshold=0.1,
+            compatibility_threshold=1.0,
+            genome=DefaultGenome(
+                num_inputs=11,
+                num_outputs=3,
+                init_hidden_layers=(),
+                node_gene=BiasNode(
+                    activation_options=ACT.tanh,
+                    aggregation_options=AGG.sum,
+                ),
+                output_transform=ACT.tanh,
+            ),
+        ),
+        problem=BraxEnv(
+            env_name="hopper",
+            max_step=1000,
+        ),
+        seed=42,
+        generation_limit=100,
+        fitness_target=5000,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+    # print(state)
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+
+
+=== ./brax/halfcheetah.py ===
+from tensorneat.pipeline import Pipeline
+from tensorneat.algorithm.neat import NEAT
+from tensorneat.genome import DefaultGenome, BiasNode
+
+from tensorneat.problem.rl import BraxEnv
+from tensorneat.common import ACT, AGG
+
+import jax
+
+
+def random_sample_policy(randkey, obs):
+    return jax.random.uniform(randkey, (6,), minval=-1.0, maxval=1.0)
+
+
+if __name__ == "__main__":
+    pipeline = Pipeline(
+        algorithm=NEAT(
+            pop_size=1000,
+            species_size=20,
+            survival_threshold=0.1,
+            compatibility_threshold=1.0,
+            genome=DefaultGenome(
+                max_nodes=50,
+                max_conns=200,
+                num_inputs=17,
+                num_outputs=6,
+                init_hidden_layers=(),
+                node_gene=BiasNode(
+                    activation_options=ACT.scaled_tanh,
+                    aggregation_options=AGG.sum,
+                ),
+                output_transform=ACT.tanh,
+            ),
+        ),
+        problem=BraxEnv(
+            env_name="halfcheetah",
+            max_step=1000,
+            obs_normalization=True,
+            sample_episodes=1000,
+            sample_policy=random_sample_policy,
+        ),
+        seed=42,
+        generation_limit=100,
+        fitness_target=8000,
+    )
+
+    # initialize state
+    state = pipeline.setup()
+    # print(state)
+    # run until terminate
+    state, best = pipeline.auto_run(state)
+
+
+=== ./with_evox/walker2d_evox.py ===
+import jax
+import jax.numpy as jnp
+
+from evox import workflows, problems
+
+from tensorneat.common.evox_adaptors import EvoXAlgorithmAdaptor, TensorNEATMonitor
+from tensorneat.algorithm import NEAT
+from tensorneat.genome import DefaultGenome, BiasNode
+from tensorneat.common import ACT, AGG
+
+neat_algorithm = NEAT(
+    pop_size=1000,
+    species_size=20,
+    survival_threshold=0.1,
+    compatibility_threshold=1.0,
+    genome=DefaultGenome(
+        max_nodes=50,
+        max_conns=200,
+        num_inputs=17,
+        num_outputs=6,
+        init_hidden_layers=(),
+        node_gene=BiasNode(
+            activation_options=ACT.tanh,
+            aggregation_options=AGG.sum,
+        ),
+        output_transform=ACT.tanh,
+    ),
+)
+evox_algorithm = EvoXAlgorithmAdaptor(neat_algorithm)
+
+key = jax.random.PRNGKey(42)
+model_key, workflow_key = jax.random.split(key)
+
+monitor = TensorNEATMonitor(neat_algorithm, is_save=False)
+problem = problems.neuroevolution.Brax(
+    env_name="walker2d",
+    policy=evox_algorithm.forward,
+    max_episode_length=1000,
+    num_episodes=1,
+)
+
+
+def nan2inf(x):
+    return jnp.where(jnp.isnan(x), -jnp.inf, x)
+
+
+# create a workflow
+workflow = workflows.StdWorkflow(
+    algorithm=evox_algorithm,
+    problem=problem,
+    candidate_transforms=[jax.jit(jax.vmap(evox_algorithm.transform))],
+    fitness_transforms=[nan2inf],
+    monitors=[monitor],
+    opt_direction="max",
+)
+
+# init the workflow
+state = workflow.init(workflow_key)
+
+# enable multi devices
+state = workflow.enable_multi_devices(state)
+
+# run the workflow for 100 steps
+for i in range(100):
+    train_info, state = workflow.step(state)
+    monitor.show()
+
+
