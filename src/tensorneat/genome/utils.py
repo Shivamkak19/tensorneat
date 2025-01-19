@@ -7,33 +7,31 @@ from ..common import fetch_first, I_INF
 
 
 def unflatten_conns(nodes, conns):
-    """
-    transform the (C, CL) connections to (N, N), which contains the idx of the connection in conns
-    connection length, N means the number of nodes, C means the number of connections
-    returns the unflatten connection indices with shape (N, N)
-    """
+    """Transform the (C, CL) connections to (N, N) array with connection indices."""
     N = nodes.shape[0]  # max_nodes
     C = conns.shape[0]  # max_conns
-    node_keys = nodes[:, 0]
-    i_keys, o_keys = conns[:, 0], conns[:, 1]
+
+    # Extract indices and ensure they're 1D arrays
+    node_keys = nodes[:, 0].reshape(-1)  # reshape to 1D
+    i_keys = conns[:, 0].reshape(-1)    # reshape to 1D
+    o_keys = conns[:, 1].reshape(-1)    # reshape to 1D
 
     def key_to_indices(key, keys):
+        # Reshape key and keys to 1D arrays for comparison
+        key = key.reshape(-1)  # ensure 1D
+        keys = keys.reshape(-1) # ensure 1D
         return fetch_first(key == keys)
 
+    # Map keys to indices
     i_idxs = vmap(key_to_indices, in_axes=(0, None))(i_keys, node_keys)
     o_idxs = vmap(key_to_indices, in_axes=(0, None))(o_keys, node_keys)
 
-    # Is interesting that jax use clip when attach data in array
-    # however, it will do nothing when setting values in an array
-    # put the index of connections in the unflatten array
-    unflatten = (
-        jnp.full((N, N), I_INF, dtype=jnp.int32)
-        .at[i_idxs, o_idxs]
-        .set(jnp.arange(C, dtype=jnp.int32))
-    )
+    # Create unflatten array
+    unflatten = jnp.full((N, N), I_INF, dtype=jnp.int32)
+    idx_array = jnp.arange(C, dtype=jnp.int32)
+    unflatten = unflatten.at[i_idxs, o_idxs].set(idx_array)
 
     return unflatten
-
 
 def valid_cnt(nodes_or_conns):
     return jnp.sum(~jnp.isnan(nodes_or_conns[:, 0]))
