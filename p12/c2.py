@@ -1,113 +1,122 @@
+import wandb
+import jax
+import jax.numpy as jnp
+import numpy as np
+import matplotlib.pyplot as plt
+import time
+import uuid
+from datetime import datetime
+import os
+from functools import partial
+import argparse
+
 from tensorneat.pipeline import Pipeline
 from tensorneat.algorithm.neat import NEAT
 from tensorneat.common import ACT, AGG
 from tensorneat.genome import BiasNode
 from classification_problem import ClassificationProblem
 from sb2 import StaticBackpropGenome
-import jax
-import jax.numpy as jnp
-import time
-import numpy as np
-import matplotlib.pyplot as plt
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--pop-size", type=int, default=50, help="Population size")
+    parser.add_argument("--max-nodes", type=int, default=20, help="Max nodes")
+    parser.add_argument("--max-conns", type=int, default=40, help="Max connections")
+    parser.add_argument("--species-size", type=int, default=5, help="Number of species")
+    parser.add_argument("--generations", type=int, default=50, help="Number of generations")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--wandb-project", type=str, default="neat-backprop-classifier", help="W&B project name")
+    parser.add_argument("--wandb-entity", type=str, default="shivamkak9-princeton-university", help="W&B entity/username")
+    
+    # Generate unique run name
+    default_run_name = f"run-{datetime.now().strftime('%Y%m%d_%H%M%S')}-{str(uuid.uuid4())[:6]}"
+    parser.add_argument("--wandb-name", type=str, default=default_run_name, help="W&B run name")
+    
+    return parser.parse_args()
 
-def evaluate_population(algorithm, state, pop_nodes, pop_conns, problem):
-    """Evaluate population with improved error handling and numerical stability"""
-    fitness = []
-    accuracies = []
+def log_network_metrics(wandb_run, network_dict, generation):
+    """Log network architecture metrics to W&B"""
+    metrics = {
+        'network/num_nodes': len(network_dict['nodes']),
+        'network/num_connections': len(network_dict['conns']),
+        'network/num_layers': len(network_dict['topo_layers'])
+    }
+    
+    # Count activation functions
+    act_funcs = {}
+    for node_data in network_dict['nodes'].values():
+        act = node_data['act']
+        act_funcs[act] = act_funcs.get(act, 0) + 1
+    
+    for act, count in act_funcs.items():
+        metrics[f'network/activation_{act}'] = count
+        
+    wandb_run.log(metrics, step=generation)
 
-    for i in range(len(pop_nodes)):
-        try:
-            # Forward pass with clipped predictions to prevent log(0)
-            predictions = algorithm.genome.static_forward(
-                state, (pop_nodes[i], pop_conns[i]), problem.train_data[0]
-            )
+def visualize_and_log_network(genome, state, nodes, conns, generation, wandb_run):
+    """Create and log network visualization"""
+    try:
+        network = genome.network_dict(state, nodes, conns)
+        
+        # Log network metrics
+        log_network_metrics(wandb_run, network, generation)
+        
+        # Create visualization
+        genome.visualize(
+            network,
+            save_path=f"temp_network_gen_{generation}.png",
+            with_labels=True,
+            figure_size=(12, 8),
+            save_dpi=300  # Higher DPI for better quality
+        )
+        
+        # Ensure the file was created
+        if not os.path.exists(f"temp_network_gen_{generation}.png"):
+            raise FileNotFoundError(f"Visualization file {viz_filename} was not created")
+        
+        # Log to wandb
+        wandb_run.log({
+            "network/graph": wandb.Image(f"temp_network_gen_{generation}.png")
+        }, step=generation)
+        
+        # Cleanup
+        # os.remove(viz_filename)
+            
+    except Exception as e:
+        print(f"Warning: Failed to create/log network visualization: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
-            # print("DIAG PREDICTIONS:", predictions)
+def train_with_logging(config):
+    # Initialize wandb
+    try:
+        run = wandb.init(
+            project=config.wandb_project,
+            entity=config.wandb_entity,
+            name=config.wandb_name,
+            config=vars(config)
+        )
+    except Exception as e:
+        print(f"Warning: Failed to initialize W&B: {str(e)}")
+        run = None
 
-            # Add small epsilon and clip predictions to prevent numerical instability
-            epsilon = 1e-7
-            predictions = jnp.clip(predictions, epsilon, 1.0 - epsilon)
-
-            # Binary cross entropy loss with improved numerical stability
-            loss = -jnp.mean(
-                problem.train_data[1] * jnp.log(predictions)
-                + (1 - problem.train_data[1]) * jnp.log(1 - predictions)
-            )
-
-            # Calculate accuracy
-            # print("data train diag:", problem.train_data[1])
-            # print("prediction diag:", predictions)
-            accuracy = jnp.mean((predictions > 0.5) == problem.train_data[1])
-            # print("accuracy diag:", accuracy)
-
-            # Use negative loss as fitness (higher is better)
-            fitness.append(-loss)
-            accuracies.append(float(accuracy))
-
-        except Exception as e:
-            print(f"Evaluation failed for individual {i}: {str(e)}")
-            fitness.append(
-                -float("inf")
-            )  # Use -inf instead of NaN for failed evaluations
-            accuracies.append(0.0)
-
-    return jnp.array(fitness), jnp.array(accuracies)
-
-
-def plot_decision_boundary(
-    algorithm, state, params, problem, title="Decision Boundary"
-):
-    """Plot the decision boundary of the classifier"""
-    # Create a mesh grid
-    x_min, x_max = (
-        problem.train_data[0][:, 0].min() - 0.5,
-        problem.train_data[0][:, 0].max() + 0.5,
-    )
-    y_min, y_max = (
-        problem.train_data[0][:, 1].min() - 0.5,
-        problem.train_data[0][:, 1].max() + 0.5,
-    )
-    xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.02), np.arange(y_min, y_max, 0.02))
-
-    # Make predictions
-    mesh_points = np.c_[xx.ravel(), yy.ravel()]
-    Z = algorithm.genome.static_forward(state, params, jnp.array(mesh_points))
-    Z = (Z > 0.5).reshape(xx.shape)
-
-    # Plot
-    plt.figure(figsize=(10, 8))
-    plt.contourf(xx, yy, Z, alpha=0.4)
-    plt.scatter(
-        problem.train_data[0][:, 0],
-        problem.train_data[0][:, 1],
-        c=problem.train_data[1],
-        alpha=0.8,
-    )
-    plt.title(title)
-    plt.xlabel("Feature 1")
-    plt.ylabel("Feature 2")
-    plt.savefig(f"decision_boundary_{int(time.time())}.png")
-    plt.close()
-
-
-def main():
-    # Initialize problem
+    # Create problem instance
     problem = ClassificationProblem(
-        train_file="circle_train.csv", test_file="circle_test.csv"
+        train_file="circle_train.csv",
+        test_file="circle_test.csv"
     )
 
-    # Create NEAT algorithm with improved parameters
+    # Initialize algorithm
     algorithm = NEAT(
-        pop_size=50,
-        species_size=5,
+        pop_size=config.pop_size,
+        species_size=config.species_size,
         survival_threshold=0.2,
         compatibility_threshold=3.0,
         genome=StaticBackpropGenome(
             num_inputs=2,
             num_outputs=1,
-            max_nodes=20,
-            max_conns=40,
+            max_nodes=config.max_nodes,
+            max_conns=config.max_conns,
             learning_rate=0.01,
             training_steps=100,
             batch_size=32,
@@ -121,172 +130,148 @@ def main():
         ),
     )
 
-    # Create pipeline with improved parameters
+    # Initialize pipeline
     pipeline = Pipeline(
         algorithm=algorithm,
         problem=problem,
-        generation_limit=50,  # More generations
+        generation_limit=config.generations,
         fitness_target=-0.1,
-        seed=42,
+        seed=config.seed
     )
 
-    # Initialize
+    # Setup
     state = pipeline.setup()
 
-    # Training tracking
-    best_fitness = -float("inf")
-    best_accuracy = 0.0
-    best_params = None
-    patience = 3
+    # Training loop
+    best_fitness = float('-inf')
+    best_genome = None
+    patience = 5
     no_improvement = 0
-
-    # History tracking
-    history = {
-        "train_accuracy": [],
-        "test_accuracy": [],
-        "fitness": [],
-        "generation_time": [],
-    }
-
-    # Training loop with improved monitoring
-    for generation in range(pipeline.generation_limit):
+    
+    print("Starting training...")
+    
+    for generation in range(config.generations):
         start_time = time.time()
-
-        print(f"\nGeneration {generation}")
-
-        # Get population
+        
+        # Get current population
         pop_nodes, pop_conns = algorithm.ask(state)
-
+        
         # Train population
         for i in range(len(pop_nodes)):
             try:
-                # Train with progress tracking
-                print(f"Training individual {i}/{len(pop_nodes)}", end="\r")
+                print(f"Training individual {i+1}/{len(pop_nodes)}", end='\r')
                 trained_nodes, trained_conns = algorithm.genome.train(
                     state, pop_nodes[i], pop_conns[i], problem.train_data
                 )
                 pop_nodes = pop_nodes.at[i].set(trained_nodes)
                 pop_conns = pop_conns.at[i].set(trained_conns)
             except Exception as e:
-                print(f"\nTraining failed for individual {i}: {str(e)}")
+                print(f"\nWarning: Training failed for individual {i}: {str(e)}")
                 continue
-
+                
+        print("\nEvaluating population...")
+        
         # Evaluate population
-        fitness, accuracies = evaluate_population(
-            algorithm, state, pop_nodes, pop_conns, problem
-        )
-
-        # print("FITNESS DIAG:", fitness)
-
-        # Update state
-        state = algorithm.tell(state, fitness)
-
+        fitnesses = []
+        accuracies = []
+        for i in range(len(pop_nodes)):
+            try:
+                predictions = algorithm.genome.static_forward(
+                    state, (pop_nodes[i], pop_conns[i]), problem.train_data[0]
+                )
+                
+                # Calculate metrics
+                epsilon = 1e-7
+                predictions = jnp.clip(predictions, epsilon, 1.0 - epsilon)
+                loss = -jnp.mean(
+                    problem.train_data[1] * jnp.log(predictions)
+                    + (1 - problem.train_data[1]) * jnp.log(1 - predictions)
+                )
+                accuracy = jnp.mean((predictions > 0.5) == problem.train_data[1])
+                
+                fitnesses.append(-loss)  # Negative loss as fitness
+                accuracies.append(float(accuracy))
+            except Exception as e:
+                print(f"Warning: Evaluation failed for individual {i}: {str(e)}")
+                fitnesses.append(float('-inf'))
+                accuracies.append(0.0)
+        
+        fitnesses = jnp.array(fitnesses)
+        accuracies = jnp.array(accuracies)
+        
+        # Update algorithm state
+        state = algorithm.tell(state, fitnesses)
+        
         # Track best performance
-        gen_best_idx = jnp.argmax(fitness)
-        gen_best_fitness = fitness[gen_best_idx]
+        gen_best_idx = jnp.argmax(fitnesses)
+        gen_best_fitness = fitnesses[gen_best_idx]
         gen_best_accuracy = accuracies[gen_best_idx]
-
+        
         if gen_best_fitness > best_fitness:
             best_fitness = gen_best_fitness
-            best_accuracy = gen_best_accuracy
-            best_params = (pop_nodes[gen_best_idx], pop_conns[gen_best_idx])
+            best_genome = (pop_nodes[gen_best_idx], pop_conns[gen_best_idx])
             no_improvement = 0
-
-            # Plot decision boundary for best model
-            plot_decision_boundary(
-                algorithm,
-                state,
-                best_params,
-                problem,
-                f"Decision Boundary - Generation {generation}",
-            )
         else:
             no_improvement += 1
-
+            
         # Calculate test metrics
-        test_predictions = algorithm.genome.static_forward(
-            state,
-            (pop_nodes[gen_best_idx], pop_conns[gen_best_idx]),
-            problem.test_data[0],
-        )
-        test_accuracy = jnp.mean((test_predictions > 0.5) == problem.test_data[1])
-
-        # Update history
+        if best_genome is not None:
+            test_predictions = algorithm.genome.static_forward(
+                state, best_genome, problem.test_data[0]
+            )
+            test_accuracy = float(jnp.mean((test_predictions > 0.5) == problem.test_data[1]))
+        else:
+            test_accuracy = 0.0
+            
+        # Log metrics
         generation_time = time.time() - start_time
-        history["train_accuracy"].append(gen_best_accuracy)
-        history["test_accuracy"].append(float(test_accuracy))
-        history["fitness"].append(float(gen_best_fitness))
-        history["generation_time"].append(generation_time)
-
+        if run is not None:
+            metrics = {
+                'generation': generation,
+                'train/accuracy_best': gen_best_accuracy,
+                'train/accuracy_mean': float(accuracies.mean()),
+                'train/fitness_best': float(gen_best_fitness),
+                'train/fitness_mean': float(fitnesses.mean()),
+                'test/accuracy': test_accuracy,
+                'time/generation': generation_time
+            }
+            run.log(metrics, step=generation)
+            
+            # Visualize best network
+            if best_genome is not None:
+                visualize_and_log_network(
+                    algorithm.genome,
+                    state,
+                    best_genome[0],
+                    best_genome[1],
+                    generation,
+                    run
+                )
+        
         # Print progress
-        print(f"\nGeneration {generation} completed in {generation_time:.2f}s")
+        print(f"Generation {generation} completed in {generation_time:.2f}s")
         print(f"Best Fitness: {gen_best_fitness:.4f}")
         print(f"Train Accuracy: {gen_best_accuracy:.4f}")
         print(f"Test Accuracy: {test_accuracy:.4f}")
-        print(f"All-time Best Fitness: {best_fitness:.4f}")
-        print(f"All-time Best Accuracy: {best_accuracy:.4f}")
-
+        
         # Early stopping
         if no_improvement >= patience:
-            print(
-                "\nEarly stopping triggered - no improvement for",
-                patience,
-                "generations",
-            )
+            print(f"\nStopping early - no improvement for {patience} generations")
             break
-
+            
         # Check fitness target
         if gen_best_fitness >= pipeline.fitness_target:
             print("\nFitness target reached!")
             break
-
+            
     print("\nTraining completed!")
+    
+    if run is not None:
+        run.finish()
 
-    # Final evaluation
-    if best_params is not None:
-        print("\nFinal Evaluation:")
-        # Train set performance
-        train_predictions = algorithm.genome.static_forward(
-            state, best_params, problem.train_data[0]
-        )
-        final_train_accuracy = jnp.mean(
-            (train_predictions > 0.5) == problem.train_data[1]
-        )
-        print(f"Final Train Accuracy: {final_train_accuracy:.4f}")
-
-        # Test set performance
-        test_predictions = algorithm.genome.static_forward(
-            state, best_params, problem.test_data[0]
-        )
-        final_test_accuracy = jnp.mean((test_predictions > 0.5) == problem.test_data[1])
-        print(f"Final Test Accuracy: {final_test_accuracy:.4f}")
-
-        # Plot final decision boundary
-        plot_decision_boundary(
-            algorithm, state, best_params, problem, "Final Decision Boundary"
-        )
-
-        # Plot training history
-        plt.figure(figsize=(12, 4))
-
-        plt.subplot(1, 2, 1)
-        plt.plot(history["train_accuracy"], label="Train")
-        plt.plot(history["test_accuracy"], label="Test")
-        plt.title("Accuracy vs Generation")
-        plt.xlabel("Generation")
-        plt.ylabel("Accuracy")
-        plt.legend()
-
-        plt.subplot(1, 2, 2)
-        plt.plot(history["fitness"])
-        plt.title("Best Fitness vs Generation")
-        plt.xlabel("Generation")
-        plt.ylabel("Fitness")
-
-        plt.tight_layout()
-        plt.savefig("training_history.png")
-        plt.close()
-
+def main():
+    config = parse_args()
+    train_with_logging(config)
 
 if __name__ == "__main__":
     main()
