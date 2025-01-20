@@ -34,24 +34,6 @@ class ClassificationProblem(FuncFit):
         self._input_shape = self.train_data[0].shape
         self._output_shape = self.train_data[1].shape
 
-    def evaluate(self, state, randkey, act_func, params):
-        # Make predictions
-        predictions = act_func(state, params, self.train_data[0])
-
-        # Calculate binary cross entropy loss
-        epsilon = 1e-7
-        predictions = jnp.clip(predictions, epsilon, 1.0 - epsilon)
-        loss = -jnp.mean(
-            self.train_data[1] * jnp.log(predictions)
-            + (1 - self.train_data[1]) * jnp.log(1 - predictions)
-        )
-
-        # Calculate accuracy
-        accuracy = jnp.mean((predictions > 0.5) == self.train_data[1])
-
-        # Return combined fitness (negative loss plus accuracy)
-        return -loss + accuracy
-
     @property
     def input_shape(self):
         return self._input_shape

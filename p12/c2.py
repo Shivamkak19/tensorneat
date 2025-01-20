@@ -36,10 +36,10 @@ def evaluate_population(algorithm, state, pop_nodes, pop_conns, problem):
             )
 
             # Calculate accuracy
-            print("data train diag:", problem.train_data[1])
-            print("prediction diag:", predictions)
+            # print("data train diag:", problem.train_data[1])
+            # print("prediction diag:", predictions)
             accuracy = jnp.mean((predictions > 0.5) == problem.train_data[1])
-            print("accuracy diag:", accuracy)
+            # print("accuracy diag:", accuracy)
 
             # Use negative loss as fitness (higher is better)
             fitness.append(-loss)
